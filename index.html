@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15243b">
+  <title>抵抗カラーバーリーダー</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <p class="eyebrow">RESISTOR SCANNER</p>
+      <h1>抵抗カラーバーリーダー</h1>
+      <p>写真の帯を順にタップして、抵抗値を読み取ります。</p>
+    </header>
+
+    <section class="panel controls" aria-label="画像入力">
+      <label class="button primary" for="imageInput">画像を選ぶ・撮影する</label>
+      <input id="imageInput" type="file" accept="image/*" capture="environment">
+      <button id="cameraButton" type="button">カメラを開く</button>
+      <button id="captureButton" type="button" hidden>この画像を撮影</button>
+      <button id="stopButton" type="button" hidden>カメラを閉じる</button>
+      <p id="cameraMessage" class="muted" role="status"></p>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>1. 帯の数を選ぶ</h2>
+        <div class="segmented" role="group" aria-label="帯の数">
+          <button class="selected" data-band-count="4" type="button" aria-pressed="true">4本</button>
+          <button data-band-count="5" type="button" aria-pressed="false">5本</button>
+        </div>
+      </div>
+      <p class="hint">許容差の帯（金・銀など）が右端になる向きで、左から1本ずつタップしてください。画像は拡大できます。</p>
+      <div id="imageArea" class="image-area">
+        <video id="video" autoplay playsinline muted hidden></video>
+        <canvas id="canvas" aria-label="抵抗画像。帯を順にタップしてください" hidden></canvas>
+        <div id="emptyState" class="empty-state">画像を選ぶか、カメラを開いてください</div>
+        <div id="magnifier" class="magnifier" hidden><canvas id="zoomCanvas" width="120" height="120"></canvas></div>
+      </div>
+      <div class="toolbar">
+        <button id="undoButton" type="button" disabled>1本戻す</button>
+        <button id="clearButton" type="button" disabled>選択を消す</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-live="polite">
+      <h2>2. 読み取り結果</h2>
+      <div id="result" class="result">帯を選ぶと、ここに抵抗値を表示します。</div>
+      <div id="bands" class="bands"></div>
+      <p id="status" class="hint"></p>
+    </section>
+    <footer>照明や反射で色が違って見える場合は、各帯の色を手動で修正できます。測定器での確認を推奨します。</footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
