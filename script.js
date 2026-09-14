@@ -17,6 +17,8 @@ const imageArea = document.querySelector('#imageArea');
 const ctx = canvas.getContext('2d', {willReadFrequently:true});
 const sourceCanvas = document.createElement('canvas');
 const sourceCtx = sourceCanvas.getContext('2d', {willReadFrequently:true});
+const contrastInput = document.querySelector('#contrastInput');
+const saturationInput = document.querySelector('#saturationInput');
 const video = document.querySelector('#video');
 const imageInput = document.querySelector('#imageInput');
 const bandsElement = document.querySelector('#bands');
@@ -32,6 +34,7 @@ let stream = null;
 let imageScale = 1;
 let fittedWidth = 0;
 let fittedHeight = 0;
+let originalPixels = null;
 
 function applyImageScale(){
   canvas.style.width = `${fittedWidth * imageScale}px`;
@@ -55,6 +58,40 @@ function classify(rgb){
 function sampleColor(x,y){
   return Array.from(sourceCtx.getImageData(x,y,1,1).data.slice(0,3));
 }
+function updateMagnifier(pick){
+  if(!pick){magnifier.hidden=true;return;}
+  const half=12;
+  zoomCtx.imageSmoothingEnabled=false;
+  zoomCtx.clearRect(0,0,120,120);
+  zoomCtx.drawImage(sourceCanvas,Math.max(0,pick.x-half),Math.max(0,pick.y-half),half*2,half*2,0,0,120,120);
+  magnifier.hidden=false;
+}
+function adjustImage(){
+  if(!originalPixels)return;
+  const contrast=Number(contrastInput.value)/100;
+  const saturation=Number(saturationInput.value)/100;
+  document.querySelector('#contrastValue').textContent=`${contrastInput.value}%`;
+  document.querySelector('#saturationValue').textContent=`${saturationInput.value}%`;
+  const adjusted=new ImageData(new Uint8ClampedArray(originalPixels.data),originalPixels.width,originalPixels.height);
+  const data=adjusted.data;
+  for(let i=0;i<data.length;i+=4){
+    const r=(data[i]-128)*contrast+128;
+    const g=(data[i+1]-128)*contrast+128;
+    const b=(data[i+2]-128)*contrast+128;
+    const gray=.2126*r+.7152*g+.0722*b;
+    data[i]=gray+(r-gray)*saturation;
+    data[i+1]=gray+(g-gray)*saturation;
+    data[i+2]=gray+(b-gray)*saturation;
+  }
+  sourceCtx.putImageData(adjusted,0,0);
+  picks.forEach(pick=>{
+    pick.rgb=sampleColor(pick.x,pick.y);
+    if(!pick.manualColor)pick.color=classify(pick.rgb);
+  });
+  redraw();updateResult();updateMagnifier(picks.at(-1));
+}
+contrastInput.addEventListener('input',adjustImage);
+saturationInput.addEventListener('input',adjustImage);
 function formatOhms(value){
   const units=[[1e9,'GΩ'],[1e6,'MΩ'],[1e3,'kΩ'],[1,'Ω']];
   const [scale,unit]=units.find(([n])=>value>=n)||units[3];
@@ -71,7 +108,7 @@ function updateResult(){
     for(const key of allowed){const option=document.createElement('option');option.value=key;option.textContent=COLORS[key].ja;select.append(option);}
     if(!allowed.includes(pick.color))pick.color=allowed[0];
     select.value=pick.color;
-    select.addEventListener('change',()=>{pick.color=select.value;updateResult();});
+    select.addEventListener('change',()=>{pick.color=select.value;pick.manualColor=true;updateResult();});
     row.append(swatch,label,select);bandsElement.append(row);
   });
   document.querySelector('#undoButton').disabled=!picks.length;
@@ -100,6 +137,11 @@ function setImage(image){
   canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
   sourceCanvas.width=canvas.width;sourceCanvas.height=canvas.height;
   sourceCtx.drawImage(image,0,0,sourceCanvas.width,sourceCanvas.height);
+  originalPixels=sourceCtx.getImageData(0,0,sourceCanvas.width,sourceCanvas.height);
+  contrastInput.disabled=false;saturationInput.disabled=false;
+  contrastInput.value='100';saturationInput.value='100';
+  document.querySelector('#contrastValue').textContent='100%';
+  document.querySelector('#saturationValue').textContent='100%';
   canvas.hidden=false;emptyState.hidden=true;imageArea.classList.add('has-image');
   const fit=Math.min(1,imageArea.clientWidth/canvas.width,imageArea.clientHeight/canvas.height);
   fittedWidth=canvas.width*fit;fittedHeight=canvas.height*fit;imageScale=1;
@@ -132,9 +174,9 @@ canvas.addEventListener('click',event=>{
   const x=Math.min(canvas.width-1,Math.max(0,Math.floor((event.clientX-rect.left)*canvas.width/rect.width)));
   const y=Math.min(canvas.height-1,Math.max(0,Math.floor((event.clientY-rect.top)*canvas.height/rect.height)));
   const rgb=sampleColor(x,y);picks.push({x,y,rgb,color:classify(rgb)});redraw();updateResult();
-  const half=12;zoomCtx.imageSmoothingEnabled=false;zoomCtx.clearRect(0,0,120,120);zoomCtx.drawImage(sourceCanvas,Math.max(0,x-half),Math.max(0,y-half),half*2,half*2,0,0,120,120);magnifier.hidden=false;
+  updateMagnifier(picks.at(-1));
 });
-document.querySelector('#undoButton').addEventListener('click',()=>{picks.pop();redraw();updateResult();});
+document.querySelector('#undoButton').addEventListener('click',()=>{picks.pop();redraw();updateResult();updateMagnifier(picks.at(-1));});
 document.querySelector('#clearButton').addEventListener('click',()=>{picks=[];redraw();updateResult();magnifier.hidden=true;});
 document.querySelectorAll('[data-band-count]').forEach(button=>button.addEventListener('click',()=>{
   bandCount=Number(button.dataset.bandCount);picks=[];redraw();updateResult();

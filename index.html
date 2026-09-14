@@ -39,6 +39,12 @@
         <div id="emptyState" class="empty-state">画像を選ぶか、カメラを開いてください</div>
         <div id="magnifier" class="magnifier" hidden><canvas id="zoomCanvas" width="120" height="120"></canvas></div>
       </div>
+      <div class="adjustments" role="group" aria-label="画像の色調整">
+        <label for="contrastInput">コントラスト <output id="contrastValue" for="contrastInput">100%</output></label>
+        <input id="contrastInput" type="range" min="0" max="200" value="100" disabled>
+        <label for="saturationInput">彩度 <output id="saturationValue" for="saturationInput">100%</output></label>
+        <input id="saturationInput" type="range" min="0" max="200" value="100" disabled>
+      </div>
       <div class="toolbar">
         <button id="undoButton" type="button" disabled>1本戻す</button>
         <button id="clearButton" type="button" disabled>選択を消す</button>

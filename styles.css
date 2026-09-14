@@ -2,3 +2,4 @@
 /* Keep the image viewport fixed while the canvas grows for wheel zoom. */
 .image-area.has-image{display:block;height:65vh;max-height:600px;min-height:260px;overflow:auto}
 .image-area.has-image canvas#canvas{max-width:none;max-height:none;margin:auto}
+.adjustments{display:grid;grid-template-columns:max-content minmax(120px,1fr);align-items:center;gap:8px 14px;margin-top:14px}.adjustments label{color:#dce8f6}.adjustments output{display:inline-block;min-width:3.5em;text-align:right;color:#aebed2}.adjustments input{width:100%;accent-color:#20bba7}.adjustments input:disabled{opacity:.45}
