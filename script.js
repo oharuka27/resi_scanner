@@ -13,7 +13,10 @@ const COLORS = {
   silver: {ja:'銀', hex:'#b8bec2', multiplier:0.01, tolerance:10}
 };
 const canvas = document.querySelector('#canvas');
+const imageArea = document.querySelector('#imageArea');
 const ctx = canvas.getContext('2d', {willReadFrequently:true});
+const sourceCanvas = document.createElement('canvas');
+const sourceCtx = sourceCanvas.getContext('2d', {willReadFrequently:true});
 const video = document.querySelector('#video');
 const imageInput = document.querySelector('#imageInput');
 const bandsElement = document.querySelector('#bands');
@@ -26,6 +29,14 @@ let bandCount = 4;
 let picks = [];
 let sourceImage = null;
 let stream = null;
+let imageScale = 1;
+let fittedWidth = 0;
+let fittedHeight = 0;
+
+function applyImageScale(){
+  canvas.style.width = `${fittedWidth * imageScale}px`;
+  canvas.style.height = `${fittedHeight * imageScale}px`;
+}
 
 function hexRgb(hex){return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));}
 function rgbLab([r,g,b]){
@@ -42,11 +53,7 @@ function classify(rgb){
   },{key:'black',distance:Infinity}).key;
 }
 function sampleColor(x,y){
-  const radius=Math.max(2,Math.round(Math.min(canvas.width,canvas.height)*0.006));
-  const pixels=ctx.getImageData(Math.max(0,x-radius),Math.max(0,y-radius),Math.min(canvas.width,x+radius+1)-Math.max(0,x-radius),Math.min(canvas.height,y+radius+1)-Math.max(0,y-radius)).data;
-  const channels=[[],[],[]];
-  for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]>200)for(let c=0;c<3;c++)channels[c].push(pixels[i+c]);}
-  return channels.map(values=>{values.sort((a,b)=>a-b);return values[Math.floor(values.length/2)]??0;});
+  return Array.from(sourceCtx.getImageData(x,y,1,1).data.slice(0,3));
 }
 function formatOhms(value){
   const units=[[1e9,'GΩ'],[1e6,'MΩ'],[1e3,'kΩ'],[1,'Ω']];
@@ -57,7 +64,7 @@ function updateResult(){
   bandsElement.replaceChildren();
   picks.forEach((pick,i)=>{
     const row=document.createElement('div');row.className='band-row';
-    const swatch=document.createElement('span');swatch.className='swatch';swatch.style.background=COLORS[pick.color].hex;
+    const swatch=document.createElement('span');swatch.className='swatch';swatch.style.background=`rgb(${pick.rgb.join(',')})`;swatch.title='クリック位置の画像色';
     const label=document.createElement('label');label.textContent=`${i+1} 本目`;
     const select=document.createElement('select');select.setAttribute('aria-label',`${i+1}本目の色`);
     const allowed=i===bandCount-1?Object.keys(COLORS).filter(k=>COLORS[k].tolerance!==undefined):i===bandCount-2?Object.keys(COLORS):Object.keys(COLORS).filter(k=>COLORS[k].digit!==undefined);
@@ -80,10 +87,10 @@ function updateResult(){
 function redraw(){
   if(!sourceImage)return;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.drawImage(sourceImage,0,0,canvas.width,canvas.height);
+  ctx.drawImage(sourceCanvas,0,0);
   picks.forEach((p,i)=>{
     ctx.beginPath();ctx.arc(p.x,p.y,Math.max(9,canvas.width*.012),0,Math.PI*2);
-    ctx.fillStyle=COLORS[p.color].hex;ctx.fill();ctx.lineWidth=Math.max(2,canvas.width*.003);ctx.strokeStyle='#fff';ctx.stroke();
+    ctx.fillStyle=`rgb(${p.rgb.join(',')})`;ctx.fill();ctx.lineWidth=Math.max(2,canvas.width*.003);ctx.strokeStyle='#fff';ctx.stroke();
     ctx.font=`bold ${Math.max(15,canvas.width*.025)}px sans-serif`;ctx.fillStyle='#fff';ctx.fillText(String(i+1),p.x+13,p.y-12);
   });
 }
@@ -91,8 +98,27 @@ function setImage(image){
   sourceImage=image;
   const scale=Math.min(1,1600/Math.max(image.width,image.height));
   canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
-  canvas.hidden=false;emptyState.hidden=true;picks=[];redraw();updateResult();
+  sourceCanvas.width=canvas.width;sourceCanvas.height=canvas.height;
+  sourceCtx.drawImage(image,0,0,sourceCanvas.width,sourceCanvas.height);
+  canvas.hidden=false;emptyState.hidden=true;imageArea.classList.add('has-image');
+  const fit=Math.min(1,imageArea.clientWidth/canvas.width,imageArea.clientHeight/canvas.height);
+  fittedWidth=canvas.width*fit;fittedHeight=canvas.height*fit;imageScale=1;
+  applyImageScale();imageArea.scrollLeft=0;imageArea.scrollTop=0;
+  picks=[];magnifier.hidden=true;redraw();updateResult();
 }
+imageArea.addEventListener('wheel',event=>{
+  if(!sourceImage||canvas.hidden||!canvas.contains(event.target))return;
+  event.preventDefault();
+  const nextScale=Math.min(8,Math.max(0.25,imageScale*(event.deltaY<0?1.15:1/1.15)));
+  if(nextScale===imageScale)return;
+  const rect=canvas.getBoundingClientRect();
+  const x=(event.clientX-rect.left)/rect.width;
+  const y=(event.clientY-rect.top)/rect.height;
+  imageScale=nextScale;applyImageScale();
+  const nextRect=canvas.getBoundingClientRect();
+  imageArea.scrollLeft+=nextRect.left+x*nextRect.width-event.clientX;
+  imageArea.scrollTop+=nextRect.top+y*nextRect.height-event.clientY;
+},{passive:false});
 imageInput.addEventListener('change',async()=>{
   const file=imageInput.files?.[0];if(!file)return;
   const url=URL.createObjectURL(file);
@@ -105,9 +131,8 @@ canvas.addEventListener('click',event=>{
   const rect=canvas.getBoundingClientRect();
   const x=Math.min(canvas.width-1,Math.max(0,Math.floor((event.clientX-rect.left)*canvas.width/rect.width)));
   const y=Math.min(canvas.height-1,Math.max(0,Math.floor((event.clientY-rect.top)*canvas.height/rect.height)));
-  ctx.drawImage(sourceImage,0,0,canvas.width,canvas.height);
-  const rgb=sampleColor(x,y);picks.push({x,y,color:classify(rgb)});redraw();updateResult();
-  const half=12;zoomCtx.imageSmoothingEnabled=false;zoomCtx.clearRect(0,0,120,120);zoomCtx.drawImage(canvas,Math.max(0,x-half),Math.max(0,y-half),half*2,half*2,0,0,120,120);magnifier.hidden=false;
+  const rgb=sampleColor(x,y);picks.push({x,y,rgb,color:classify(rgb)});redraw();updateResult();
+  const half=12;zoomCtx.imageSmoothingEnabled=false;zoomCtx.clearRect(0,0,120,120);zoomCtx.drawImage(sourceCanvas,Math.max(0,x-half),Math.max(0,y-half),half*2,half*2,0,0,120,120);magnifier.hidden=false;
 });
 document.querySelector('#undoButton').addEventListener('click',()=>{picks.pop();redraw();updateResult();});
 document.querySelector('#clearButton').addEventListener('click',()=>{picks=[];redraw();updateResult();magnifier.hidden=true;});
@@ -119,7 +144,7 @@ async function stopCamera(){if(stream){stream.getTracks().forEach(track=>track.s
 document.querySelector('#cameraButton').addEventListener('click',async()=>{
   const message=document.querySelector('#cameraMessage');
   if(!navigator.mediaDevices?.getUserMedia){message.textContent='このブラウザではカメラを使えません。画像選択をお試しください。';return;}
-  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=stream;video.hidden=false;canvas.hidden=true;emptyState.hidden=true;document.querySelector('#captureButton').hidden=false;document.querySelector('#stopButton').hidden=false;document.querySelector('#cameraButton').hidden=true;message.textContent='抵抗を画面に入れて「この画像を撮影」を押してください。';}
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=stream;video.hidden=false;canvas.hidden=true;imageArea.classList.remove('has-image');emptyState.hidden=true;document.querySelector('#captureButton').hidden=false;document.querySelector('#stopButton').hidden=false;document.querySelector('#cameraButton').hidden=true;message.textContent='抵抗を画面に入れて「この画像を撮影」を押してください。';}
   catch(error){message.textContent=`カメラを開けませんでした（${error.name}）。画像選択をお試しください。`;}
 });
 document.querySelector('#captureButton').addEventListener('click',()=>{
@@ -127,5 +152,5 @@ document.querySelector('#captureButton').addEventListener('click',()=>{
   const capture=document.createElement('canvas');capture.width=video.videoWidth;capture.height=video.videoHeight;capture.getContext('2d').drawImage(video,0,0);
   setImage(capture);stopCamera();document.querySelector('#cameraMessage').textContent='撮影しました。帯を左から順にタップしてください。';
 });
-document.querySelector('#stopButton').addEventListener('click',()=>{stopCamera();canvas.hidden=!sourceImage;emptyState.hidden=!!sourceImage;});
+document.querySelector('#stopButton').addEventListener('click',()=>{stopCamera();canvas.hidden=!sourceImage;imageArea.classList.toggle('has-image',!!sourceImage);emptyState.hidden=!!sourceImage;});
 updateResult();
